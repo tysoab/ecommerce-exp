@@ -37,6 +37,8 @@ exports.getLogin = (req, res, next) => {
     path: "/login",
     pageTitle: "Login",
     errorMessage: message,
+    oldInput: { email: "" },
+    validationErrors: [],
   });
 };
 
@@ -46,12 +48,33 @@ exports.postLogin = (req, res, next) => {
 
   // session
   const { email, password } = req.body;
+  // validate user input
+  const errors = validationResult(req);
+
+  if (!errors.isEmpty()) {
+    // console.log(errors.array());
+    return res.status(422).render("auth/login", {
+      path: "/login",
+      pageTitle: "Login",
+      errorMessage: errors.array()[0].msg,
+      oldInput: { email: email },
+      validationErrors: errors.array(),
+    });
+  }
+
   User.findOne({ email: email })
     .then((user) => {
       if (!user) {
         // flash error msg
-        req.flash("error", "Record not found!");
-        return res.redirect("/login");
+        // req.flash("error", "Record not found!");
+        // return res.redirect("/login");
+        return res.status(422).render("auth/login", {
+          path: "/login",
+          pageTitle: "Login",
+          errorMessage: "Invalid user record",
+          oldInput: { email: email },
+          validationErrors: errors.array(),
+        });
       }
 
       bcrypt
@@ -65,8 +88,15 @@ exports.postLogin = (req, res, next) => {
               res.redirect("/");
             });
           }
-          req.flash("error", "Record not found!");
-          res.redirect("/login");
+          // req.flash("error", "Record not found!");
+          // res.redirect("/login");
+          return res.status(422).render("auth/login", {
+            path: "/login",
+            pageTitle: "Login",
+            errorMessage: "Invalid user record",
+            oldInput: { email: email },
+            validationErrors: [], // errors.array(),
+          });
         })
         .catch((err) => {
           console.log(err);
@@ -95,6 +125,8 @@ exports.getSignup = (req, res, next) => {
     path: "/signup",
     pageTitle: "Signup",
     errorMessage: message,
+    oldInput: { email: "", password: "" },
+    validationErrors: [],
   });
 };
 
@@ -105,60 +137,63 @@ exports.postSignup = (req, res, next) => {
   const errors = validationResult(req);
 
   if (!errors.isEmpty()) {
-    // console.log(errors.array());
+    console.log(errors.array());
     return res.status(422).render("auth/signup", {
       path: "/signup",
       pageTitle: "Signup",
       errorMessage: errors.array()[0].msg,
+      oldInput: { email: email, password: password },
+      validationErrors: errors.array(),
     });
   }
-  User.findOne({ email: email })
-    .then((userDoc) => {
-      if (userDoc) {
-        req.flash(
-          "error",
-          "Email Address already exist!, try a new Email Address"
-        );
-        return res.redirect("/signup");
-      }
+  // User.findOne({ email: email })
+  //   .then((userDoc) => {
+  //     if (userDoc) {
+  //       req.flash(
+  //         "error",
+  //         "Email Address already exist!, try a new Email Address"
+  //       );
+  //       return res.redirect("/signup");
+  //     }
 
-      // hash password
-      return bcrypt
-        .hash(password, 12)
-        .then((hashedPassword) => {
-          const user = new User({
-            email: email,
-            password: hashedPassword,
-            cart: { items: [] },
-          });
+  // hash password
+  // return bcrypt
+  bcrypt
+    .hash(password, 12)
+    .then((hashedPassword) => {
+      const user = new User({
+        email: email,
+        password: hashedPassword,
+        cart: { items: [] },
+      });
 
-          return user.save();
-        })
-        .then((result) => {
-          res.redirect("/login");
-
-          // Configure the mailoptions object
-          const mailOptions = {
-            from: "taiwoyusufsunday@gmail.com",
-            to: email,
-            subject: "Sending Email using Node.js",
-            // text: "That was easy!",
-            html: `<h1>You successfully signed up!</h1>`,
-          };
-          // Send the email
-          transporter.sendMail(mailOptions, function (error, info) {
-            if (error) {
-              console.log("Error:", error);
-            } else {
-              console.log("Email sent:", info.response);
-            }
-          });
-        });
+      return user.save();
     })
+    .then((result) => {
+      res.redirect("/login");
 
-    .catch((err) => {
-      console.log(err);
+      // Configure the mailoptions object
+      const mailOptions = {
+        from: "taiwoyusufsunday@gmail.com",
+        to: email,
+        subject: "Sending Email using Node.js",
+        // text: "That was easy!",
+        html: `<h1>You successfully signed up!</h1>`,
+      };
+      // Send the email
+      transporter.sendMail(mailOptions, function (error, info) {
+        if (error) {
+          console.log("Error:", error);
+        } else {
+          console.log("Email sent:", info.response);
+        }
+      });
     });
+  // })
+
+  // .catch((err) => {
+  //   console.log(err);
+  // });
 };
 
 exports.getReset = (req, res, next) => {

@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 
 const isAuth = require("../middleware/is-auth");
+const User = require("../models/user");
 
 // validator
 const { check, body } = require("express-validator/lib");
@@ -11,7 +12,23 @@ const { check, body } = require("express-validator/lib");
 const authController = require("../controllers/auth");
 router.get("/login", authController.getLogin);
 
-router.post("/login", authController.postLogin);
+router.post(
+  "/login",
+  [
+    check("email")
+      .isEmail()
+      .withMessage("Please enter a valid email address.")
+      .normalizeEmail(),
+    body(
+      "password",
+      "Please enter a password with only numbers and text and at least 6 characters."
+    )
+      .isLength({ min: 6 })
+      .isAlphanumeric()
+      .trim(),
+  ],
+  authController.postLogin
+);
 router.post("/logout", authController.postLogout);
 
 router.get("/signup", authController.getSignup);
@@ -22,11 +39,20 @@ router.post(
     check("email")
       .isEmail()
       .withMessage("Please enter a valid email address.")
+      .normalizeEmail()
       .custom((value, { req }) => {
-        if (value === "test@test.com") {
-          throw new Error("This email address is forbidden.");
-        }
-        return true;
+        // if (value === "test@test.com") {
+        //   throw new Error("This email address is forbidden.");
+        // }
+        // return true;
+
+        return User.findOne({ email: value }).then((userDoc) => {
+          if (userDoc) {
+            return Promise.reject(
+              "Email Address already exist!, try a new Email Address."
+            );
+          }
+        });
       }),
 
     body(
@@ -34,15 +60,18 @@ router.post(
       "Please enter a password with only numbers and text and at least 6 characters."
     )
       .isLength({ min: 6 })
-      .isAlphanumeric(),
+      .isAlphanumeric()
+      .trim(),
 
-    body("confirmPassword").custom((value, { req }) => {
-      if (value !== req.body.password) {
-        throw new Error("Password not matched!");
-      }
+    body("confirmPassword")
+      .trim()
+      .custom((value, { req }) => {
+        if (value !== req.body.password) {
+          throw new Error("Password not matched!");
+        }
 
-      return true;
-    }),
+        return true;
+      }),
   ],
   authController.postSignup
 );
