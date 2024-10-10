@@ -10,12 +10,13 @@ const session = require("express-session");
 const MongoDBStore = require("connect-mongodb-session")(session);
 const csrf = require("csurf");
 const flash = require("connect-flash");
+const mongoose = require("mongoose");
+const multer = require("multer");
 
 const MONGODB_URI =
   "mongodb+srv://tysoab:Tysoabolutee@cluster0.ugql4.mongodb.net/mongoose_shop?retryWrites=true&w=majority&appName=Cluster0";
 
 // mongoose connect
-const mongoose = require("mongoose");
 
 const app = express();
 // initialize mongodbstore
@@ -26,13 +27,41 @@ const store = new MongoDBStore({
 
 // initialize csurf
 const csrfProtection = csrf();
+const todayDate = Date.now();
+// file storage
+const fileStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, "images");
+  },
+  filename: (req, file, cb) => {
+    cb(null, todayDate + "-" + file.originalname);
+  },
+});
+
+// file filter
+const fileFilter = (req, file, cb) => {
+  if (
+    file.mimetype === "image/png" ||
+    file.mimetype === "image/jpg" ||
+    file.mimetype === "image/jpeg"
+  ) {
+    cb(null, true);
+  } else {
+    cb(null, false);
+  }
+};
 
 app.set("view engine", "ejs");
 app.set("views", "views");
 
 // middleware
 app.use(bodyParser.urlencoded({ extended: false }));
+// app.use(multer({ dest: "images" }).single("image")); // name use in the file input tag inside a form
+app.use(
+  multer({ storage: fileStorage, fileFilter: fileFilter }).single("image")
+);
 app.use(express.static(path.join(__dirname, "public")));
+app.use("/images", express.static(path.join(__dirname, "images")));
 
 // session
 app.use(
@@ -50,21 +79,6 @@ app.use(csrfProtection);
 // register flash after you initialize a session
 app.use(flash());
 
-// user middleware
-app.use((req, res, next) => {
-  if (!req.session.user) {
-    return next();
-  }
-  User.findById(req.session.user._id)
-    .then((user) => {
-      req.user = user;
-      next();
-    })
-    .catch((err) => {
-      console.log(err);
-    });
-});
-
 // things that is common to all views
 app.use((req, res, next) => {
   res.locals.isAuthenticated = req.session.isLoggedIn;
@@ -72,27 +86,51 @@ app.use((req, res, next) => {
   next();
 });
 
+// user middleware
+app.use((req, res, next) => {
+  // console.log("user", req);
+  if (!req.session.user) {
+    return next();
+  }
+  User.findById(req.session.user._id)
+    .then((user) => {
+      if (!user) {
+        return next();
+      }
+
+      req.user = user;
+      next();
+    })
+    .catch((err) => {
+      console.log(err);
+      next(new Error(err));
+    });
+});
+
 app.use("/admin", adminRoutes);
 app.use(shopRoutes);
 app.use(authRoutes);
 
+app.get("/500", errorController.get500);
+
 app.use(errorController.get404);
+
+// error middleware
+app.use((error, req, res, next) => {
+  // res.status(error.httpStatusCode).render(...);
+  // res.redirect("/500");
+  // console.log(req);
+  res.status(500).render("500", {
+    pageTitle: "Error!",
+    path: "/500",
+    isAuthenticated: req.session.isLoggedIn,
+  });
+});
 
 // connection
 mongoose
   .connect(MONGODB_URI)
   .then((result) => {
-    // User.findOne().then((user) => {
-    //   if (!user) {
-    //     const user = new User({
-    //       name: "Taiwo Yusuf",
-    //       email: "tysoab@gmail.com",
-    //       cart: { items: [] },
-    //     });
-    //     user.save();
-    //   }
-    // });
-
     app.listen(3000);
   })
   .catch((err) => {
